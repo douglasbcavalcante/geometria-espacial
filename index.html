@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometria Espacial - Visualização 3D</title>
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; align-items: center; background-color: white; }
+        .logos {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 10px;
+        }
+        .logo {
+            height: 80px;
+        }
+        canvas { display: block; }
+        #controls { margin: 20px; }
+        label { margin-right: 10px; }
+        #volume { margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="logos">
+        <img src="logo_rede_emancipa.png" alt="Logo Rede Emancipa" class="logo">
+        <img src="logo_cursinho_angela_davis.png" alt="Logo Cursinho Ângela Davis" class="logo">
+    </div>
+
+    <h1>Geometria Espacial 3D</h1>
+    <div id="controls">
+        <label for="solidType">Tipo de sólido:</label>
+        <select id="solidType">
+            <option value="prism">Prisma</option>
+            <option value="pyramid">Pirâmide</option>
+            <option value="sphere">Esfera</option>
+        </select>
+
+        <label for="baseShape">Forma da base (Prisma):</label>
+        <select id="baseShape">
+            <option value="3">Triângulo</option>
+            <option value="4">Quadrado</option>
+            <option value="5">Pentágono</option>
+            <option value="6">Hexágono</option>
+        </select>
+        
+        <label for="baseSize">Lado da base:</label>
+        <input type="number" id="baseSize" value="5" min="1" step="1">
+
+        <label for="height">Altura/Raio:</label>
+        <input type="number" id="height" value="10" min="1" step="1">
+
+        <label for="wireframe">Modo Wireframe:</label>
+        <input type="checkbox" id="wireframe">
+
+        <button id="drawButton">Desenhar</button>
+        <button id="volumeButton">Calcular Volume</button>
+        <button id="resetButton">Resetar Volume</button>
+    </div>
+
+    <div id="formula"></div>
+    <div id="volume"></div>
+
+    <script id="MathJax" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.128.0';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls, solid, edges, dimensionLines = [];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff); 
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            camera.position.z = 20;
+            controls.update();
+
+            createSolid('prism', 4, 5, 10, false);
+
+            document.getElementById("drawButton").addEventListener("click", updateGeometry);
+            document.getElementById("volumeButton").addEventListener("click", calculateVolume);
+            document.getElementById("resetButton").addEventListener("click", resetVolume);
+            document.getElementById("solidType").addEventListener("change", toggleElements);
+        }
+
+        function createSolid(type, sides, baseSize, height, wireframe) {
+            if (solid) {
+                scene.remove(solid);
+                scene.remove(edges);
+                dimensionLines.forEach(line => scene.remove(line));
+                dimensionLines = [];
+            }
+
+            let geometry;
+            switch (type) {
+                case 'prism':
+                    geometry = createPrismGeometry(sides, baseSize, height);
+                    break;
+                case 'pyramid':
+                    geometry = new THREE.ConeGeometry(baseSize / 2, height, 4);
+                break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(height / 2, 32, 32);
+                    break;
+            }
+
+            const material = new THREE.MeshBasicMaterial({ color: 0x0077ff, wireframe: wireframe });
+            solid = new THREE.Mesh(geometry, material);
+            scene.add(solid);
+
+            edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: 0x000000 }));
+            scene.add(edges);
+        }
+
+        function createPrismGeometry(sides, radius, height) {
+            const shape = new THREE.Shape();
+            const angleStep = (2 * Math.PI) / sides;
+
+            for (let i = 0; i < sides; i++) {
+                const angle = i * angleStep;
+                const x = radius * Math.cos(angle);
+                const y = radius * Math.sin(angle);
+                if (i === 0) shape.moveTo(x, y);
+                else shape.lineTo(x, y);
+            }
+            shape.closePath();
+
+            const extrudeSettings = { depth: height, bevelEnabled: false };
+            return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        }
+
+        function updateGeometry() {
+            const type = document.getElementById("solidType").value;
+            const sides = parseInt(document.getElementById("baseShape").value);
+            const baseSize = parseFloat(document.getElementById("baseSize").value);
+            const height = parseFloat(document.getElementById("height").value);
+            const wireframe = document.getElementById("wireframe").checked;
+            createSolid(type, sides, baseSize, height, wireframe);
+        }
+
+        function displayFormula(formula) {
+            document.getElementById("formula").innerText = `Fórmula do Volume: ${formula}`;
+            MathJax.typeset(); // Atualiza a renderização das fórmulas LaTeX
+        }
+
+        function calculateVolume() {
+            const type = document.getElementById("solidType").value;
+            const baseSize = parseFloat(document.getElementById("baseSize").value);
+            const height = parseFloat(document.getElementById("height").value);
+            let volume;
+
+            switch (type) {
+                case 'prism':
+                    const baseAreaPrism = calculatePolygonArea(baseSize, parseInt(document.getElementById("baseShape").value));
+                    volume = baseAreaPrism * height;
+                    displayFormula(`$$V = \\text{Área da base} \\times \\text{Altura} $$`);
+                    break;
+                case 'pyramid':
+                    const baseAreaPyramid = calculatePolygonArea(baseSize, 4);
+                    volume = (baseAreaPyramid * height) / 3;
+                    displayFormula(`$$V = \\frac{\\text{Área da base} \\times \\text{Altura}}{3} $$`);                   
+                    break;
+                case 'sphere':
+                    volume = (4 / 3) * Math.PI * Math.pow(height, 3);
+                    displayFormula(`$$V = \\frac{4}{3} \\times \\pi \\times R^3 $$`);                    
+                    break;
+            }
+
+            document.getElementById("volume").innerText = `Volume: ${volume.toFixed(2)} unidades cúbicas`;
+        }
+
+        function resetVolume() {
+            document.getElementById("volume").innerText = '';
+            document.getElementById("formula").innerText = '';
+        }
+
+
+        function toggleElements() {
+            const type = document.getElementById("solidType").value;
+            const baseShape = document.getElementById("baseShape");
+            const baseSize = document.getElementById("baseSize");
+            
+            if (type === "sphere") {
+                baseShape.disabled = true;
+                baseSize.disabled = true;  // Desabilita o tamanho da base
+                document.getElementById("height").value = "10"; // Usa altura como raio para esfera
+            } else {
+                baseShape.disabled = false;
+                baseSize.disabled = false;
+            }
+        }
+
+        function calculatePolygonArea(sideLength, sides) {
+            const angle = Math.PI / sides;
+            return (sides * Math.pow(sideLength, 2)) / (4 * Math.tan(angle));
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        init();
+        animate();
+    </script>
+
+</body>
+</html>
