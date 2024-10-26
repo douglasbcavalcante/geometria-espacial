@@ -25,10 +25,10 @@
 
     <div class="logos">
         <img src="logo_rede_emancipa.png" alt="Logo Rede Emancipa" class="logo">
+        <h1>Geometria Espacial 3D</h1>
         <img src="logo_cursinho_angela_davis.png" alt="Logo Cursinho Ângela Davis" class="logo">
     </div>
 
-    <h1>Geometria Espacial 3D</h1>
     <div id="controls">
         <label for="solidType">Tipo de sólido:</label>
         <select id="solidType">
@@ -39,14 +39,25 @@
 
         <label for="baseShape">Forma da base (Prisma):</label>
         <select id="baseShape">
+            <option value="circle">Círculo</option>
+            <option value="rightTriangle">Triângulo Retângulo</option>
             <option value="3">Triângulo</option>
             <option value="4">Quadrado</option>
             <option value="5">Pentágono</option>
             <option value="6">Hexágono</option>
         </select>
         
+        <label for="radius">Raio:</label>
+        <input type="number" id="radius" value="5" min="1" step="1">
+
         <label for="baseSize">Lado da base:</label>
         <input type="number" id="baseSize" value="5" min="1" step="1">
+
+        <label for="cateto1">Cateto 1:</label>
+        <input type="number" id="cateto1" value="5" min="1" step="1">
+
+        <label for="cateto2">Cateto 2:</label>
+        <input type="number" id="cateto2" value="5" min="1" step="1">
 
         <label for="height">Altura/Raio:</label>
         <input type="number" id="height" value="10" min="1" step="1">
@@ -89,8 +100,8 @@
             document.getElementById("volumeButton").addEventListener("click", calculateVolume);
             document.getElementById("resetButton").addEventListener("click", resetVolume);
             document.getElementById("solidType").addEventListener("change", toggleElements);
+            document.getElementById("baseShape").addEventListener("change", toggleBaseInputs);
         }
-
         function createSolid(type, sides, baseSize, height, wireframe) {
             if (solid) {
                 scene.remove(solid);
@@ -100,16 +111,37 @@
             }
 
             let geometry;
+            const radius = parseFloat(document.getElementById("radius").value);
+
             switch (type) {
                 case 'prism':
-                    geometry = createPrismGeometry(sides, baseSize, height);
+                    if (sides === 'circle') {
+                        geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
+                    } else if (sides === 'rightTriangle') {
+                        geometry = createRightTrianglePrismGeometry(parseFloat(document.getElementById("cateto1").value), parseFloat(document.getElementById("cateto2").value), height);
+                    } else {
+                        geometry = createPrismGeometry(parseInt(sides), baseSize, height);
+                    }
                     break;
+
                 case 'pyramid':
-                    geometry = new THREE.ConeGeometry(baseSize / 2, height, 4);
-                break;
+                    if (sides === 'circle') {
+                        geometry = new THREE.ConeGeometry(radius, height, 32); // Cone para base circular
+                    } else if (!isNaN(parseInt(sides))) {
+                        geometry = new THREE.ConeGeometry(baseSize / 2, height, parseInt(sides)); // Pirâmide com lados
+                    } else {
+                        console.error("Base inválida para pirâmide.");
+                        return;
+                    }
+                    break;
+
                 case 'sphere':
                     geometry = new THREE.SphereGeometry(height / 2, 32, 32);
                     break;
+
+                default:
+                    console.error("Tipo de sólido inválido.");
+                    return;
             }
 
             const material = new THREE.MeshBasicMaterial({ color: 0x0077ff, wireframe: wireframe });
@@ -137,9 +169,20 @@
             return new THREE.ExtrudeGeometry(shape, extrudeSettings);
         }
 
+        function createRightTrianglePrismGeometry(cateto1, cateto2, height) {
+            const shape = new THREE.Shape();
+            shape.moveTo(0, 0);
+            shape.lineTo(cateto1, 0);
+            shape.lineTo(0, cateto2);
+            shape.lineTo(0, 0);
+
+            const extrudeSettings = { depth: height, bevelEnabled: false };
+            return new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        }
+
         function updateGeometry() {
             const type = document.getElementById("solidType").value;
-            const sides = parseInt(document.getElementById("baseShape").value);
+            const sides = document.getElementById("baseShape").value;
             const baseSize = parseFloat(document.getElementById("baseSize").value);
             const height = parseFloat(document.getElementById("height").value);
             const wireframe = document.getElementById("wireframe").checked;
@@ -153,24 +196,46 @@
 
         function calculateVolume() {
             const type = document.getElementById("solidType").value;
+            const sides = document.getElementById("baseShape").value;
             const baseSize = parseFloat(document.getElementById("baseSize").value);
             const height = parseFloat(document.getElementById("height").value);
+            const radius = parseFloat(document.getElementById("radius").value);
+            const cateto1 = parseFloat(document.getElementById("cateto1").value);
+            const cateto2 = parseFloat(document.getElementById("cateto2").value);
             let volume;
 
             switch (type) {
                 case 'prism':
-                    const baseAreaPrism = calculatePolygonArea(baseSize, parseInt(document.getElementById("baseShape").value));
-                    volume = baseAreaPrism * height;
-                    displayFormula(`$$V = \\text{Área da base} \\times \\text{Altura} $$`);
+                    let baseArea;
+                    if (sides === 'circle') {
+                        baseArea = Math.PI * Math.pow(radius, 2);
+                        displayFormula(`$$V = \\pi \\times r^2 \\times h$$`);
+                    } else if (sides === 'rightTriangle') {
+                        baseArea = (cateto1 * cateto2) / 2;
+                        displayFormula(`$$V = \\frac{1}{2} \\times \\text{Cateto 1} \\times \\text{Cateto 2} \\times \\text{Altura}$$`);
+                    } else {
+                        baseArea = calculatePolygonArea(baseSize, parseInt(sides));
+                        displayFormula(`$$V = \\text{Área da base} \\times \\text{Altura} $$`);
+                    }
+                    volume = baseArea * height;
                     break;
                 case 'pyramid':
-                    const baseAreaPyramid = calculatePolygonArea(baseSize, 4);
+                    let baseAreaPyramid
+                    if (sides === 'circle') {
+                            baseAreaPyramid = Math.PI * Math.pow(radius, 2);
+                            displayFormula(`$$V = \\frac{1}{3} \\times \\pi \\times r^2 \\times h$$`);
+                        } else if (sides === 'rightTriangle') {
+                            baseAreaPyramid = (cateto1 * cateto2) / 2;
+                            displayFormula(`$$V = \\frac{1}{2} \\times \\text{Cateto 1} \\times \\text{Cateto 2} \\times \\text{Altura}$$`);
+                        } else {
+                            baseArea = calculatePolygonArea(baseSize, parseInt(sides));
+                            displayFormula(`$$V = \\text{Área da base} \\times \\text{Altura} $$`);
+                        }
                     volume = (baseAreaPyramid * height) / 3;
-                    displayFormula(`$$V = \\frac{\\text{Área da base} \\times \\text{Altura}}{3} $$`);                   
                     break;
                 case 'sphere':
-                    volume = (4 / 3) * Math.PI * Math.pow(height, 3);
-                    displayFormula(`$$V = \\frac{4}{3} \\times \\pi \\times R^3 $$`);                    
+                    volume = (4 / 3) * Math.PI * Math.pow(height / 2, 3);
+                    displayFormula(`$$V = \\frac{4}{3} \\times \\pi \\times R^3 $$`);
                     break;
             }
 
@@ -182,20 +247,33 @@
             document.getElementById("formula").innerText = '';
         }
 
-
         function toggleElements() {
             const type = document.getElementById("solidType").value;
             const baseShape = document.getElementById("baseShape");
-            const baseSize = document.getElementById("baseSize");
-            
+            const radiusInput = document.getElementById("radius");
+            const baseSizeInput = document.getElementById("baseSize");
+            const cateto1Input = document.getElementById("cateto1");
+            const cateto2Input = document.getElementById("cateto2");
+
             if (type === "sphere") {
                 baseShape.disabled = true;
-                baseSize.disabled = true;  // Desabilita o tamanho da base
-                document.getElementById("height").value = "10"; // Usa altura como raio para esfera
+                baseSizeInput.disabled = true;
+                radiusInput.disabled = true;
+                cateto1Input.disabled = true;
+                cateto2Input.disabled = true;
+                document.getElementById("height").value = "10"; 
             } else {
                 baseShape.disabled = false;
-                baseSize.disabled = false;
+                toggleBaseInputs();
             }
+        }
+
+        function toggleBaseInputs() {
+            const baseShape = document.getElementById("baseShape").value;
+            document.getElementById("radius").disabled = baseShape !== "circle";
+            document.getElementById("baseSize").disabled = baseShape === "circle" || baseShape === "rightTriangle";
+            document.getElementById("cateto1").disabled = baseShape !== "rightTriangle";
+            document.getElementById("cateto2").disabled = baseShape !== "rightTriangle";
         }
 
         function calculatePolygonArea(sideLength, sides) {
